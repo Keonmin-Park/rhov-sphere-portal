@@ -1,0 +1,167 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rhov-portal-sa
+  namespace: rhov-portal
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: rhov-portal-operator-role
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "namespaces", "pods", "persistentvolumes", "persistentvolumeclaims", "events"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["kubevirt.io", "subresources.kubevirt.io"]
+    resources: ["virtualmachines", "virtualmachineinstances", "virtualmachineinstancemigrations", "virtualmachineinstances/vnc", "virtualmachineinstances/console"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["snapshot.kubevirt.io"]
+    resources: ["virtualmachinesnapshots", "virtualmachinerestores"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["cdi.kubevirt.io"]
+    resources: ["datavolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["k8s.cni.cncf.io"]
+    resources: ["network-attachment-definitions"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rhov-portal-operator-binding
+subjects:
+  - kind: ServiceAccount
+    name: rhov-portal-sa
+    namespace: rhov-portal
+roleRef:
+  kind: ClusterRole
+  name: rhov-portal-operator-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: rhov-portal-react
+  namespace: rhov-portal
+spec:
+  lookupPolicy:
+    local: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rhov-portal-react
+  namespace: rhov-portal
+  labels:
+    app: rhov-portal-react
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rhov-portal-react
+  template:
+    metadata:
+      labels:
+        app: rhov-portal-react
+    spec:
+      serviceAccountName: rhov-portal-sa
+      containers:
+        - name: portal
+          image: image-registry.openshift-image-registry.svc:5000/rhov-portal/rhov-portal-react:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4000
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "4000"
+            - name: NODE_ENV
+              value: "production"
+            - name: AUTO_SPAWN_COLLECTOR
+              value: "false"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /api/v1/overview
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/overview
+              port: 4000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+        - name: collector
+          image: image-registry.openshift-image-registry.svc:5000/rhov-portal/rhov-portal-react:latest
+          command: ["node", "collector.js"]
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4001
+              protocol: TCP
+          env:
+            - name: COLLECTOR_PORT
+              value: "4001"
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4001
+            initialDelaySeconds: 3
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rhov-portal-react
+  namespace: rhov-portal
+  labels:
+    app: rhov-portal-react
+spec:
+  ports:
+    - name: http
+      port: 4000
+      targetPort: 4000
+      protocol: TCP
+  selector:
+    app: rhov-portal-react
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: rhov-portal-react
+  namespace: rhov-portal
+  annotations:
+    haproxy.router.openshift.io/timeout: 1h
+    haproxy.router.openshift.io/proxy-buffer-size: 16k
+  labels:
+    app: rhov-portal-react
+spec:
+  to:
+    kind: Service
+    name: rhov-portal-react
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

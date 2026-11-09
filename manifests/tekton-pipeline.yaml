@@ -1,0 +1,63 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: rhov-portal-pipeline
+  namespace: rhov-portal
+spec:
+  description: "CI/CD Pipeline to build and deploy RHOV Sphere React Portal"
+  params:
+    - name: git-url
+      type: string
+      description: "Git Repository URL"
+      default: "https://gitlab.apps.rhov-cluster.example.local/cicd-admin/rhov-sphere-portal-react.git"
+    - name: git-revision
+      type: string
+      description: "Git Branch/Tag"
+      default: "main"
+    - name: image-name
+      type: string
+      description: "Target Image in OpenShift Internal Registry"
+      default: "image-registry.openshift-image-registry.svc:5000/rhov-portal/rhov-portal-react:latest"
+  workspaces:
+    - name: shared-workspace
+  tasks:
+    - name: fetch-repository
+      taskRef:
+        name: git-clone
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: URL
+          value: $(params.git-url)
+        - name: REVISION
+          value: $(params.git-revision)
+        - name: DELETE_EXISTING
+          value: "true"
+        - name: SSL_VERIFY
+          value: "false"
+
+    - name: build-image
+      runAfter:
+        - fetch-repository
+      taskRef:
+        name: buildah
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: IMAGE
+          value: $(params.image-name)
+        - name: TLS_VERIFY
+          value: "false"
+
+    - name: deploy-portal
+      runAfter:
+        - build-image
+      taskRef:
+        name: openshift-client
+      params:
+        - name: SCRIPT
+          value: |
+            oc rollout restart deployment/rhov-portal-react -n rhov-portal
+            oc rollout status deployment/rhov-portal-react -n rhov-portal --timeout=120s

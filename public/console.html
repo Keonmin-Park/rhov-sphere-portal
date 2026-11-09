@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RHOV Sphere - VNC Web Console</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      background-color: #050811;
+      color: #060b0f;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* TOP TOOLBAR */
+    .console-header {
+      height: 48px;
+      background: #0c1322;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 20px;
+      height: 20px;
+      fill: #0091da;
+    }
+
+    .vm-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .vm-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.2px;
+    }
+
+    .meta-tag {
+      font-size: 11.5px;
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #10b981;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      padding: 3px 8px;
+      border-radius: 12px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 6px #10b981;
+    }
+
+    .status-dot.connecting {
+      background: #f59e0b;
+      box-shadow: 0 0 6px #f59e0b;
+    }
+
+    .status-dot.offline {
+      background: #ef4444;
+      box-shadow: 0 0 6px #ef4444;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .action-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      padding: 5px 11px;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: inherit;
+      transition: all 0.15s ease;
+    }
+
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      border-color: #475569;
+    }
+
+    .action-btn.primary {
+      background: #0091da;
+      border-color: #0091da;
+      color: #ffffff;
+    }
+
+    .action-btn.primary:hover {
+      background: #0284c7;
+    }
+
+    /* VIEWPORT CONTAINER */
+    .console-viewport {
+      flex: 1;
+      position: relative;
+      background: #000000;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* VNC VIEW */
+    #vncContainer {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      outline: none;
+    }
+
+    #vncContainer canvas {
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    }
+
+    /* NOTICE / TIPS BAR */
+    .notice-bar {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid #334155;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 0.8;
+      transition: opacity 0.2s ease;
+    }
+
+    .notice-bar:hover {
+      opacity: 1;
+    }
+
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #050811;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      z-index: 50;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(0, 145, 218, 0.2);
+      border-top-color: #0091da;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* TOAST NOTIFICATION */
+    .toast-msg {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(16, 185, 129, 0.95);
+      backdrop-filter: blur(8px);
+      color: #ffffff;
+      padding: 7px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .toast-msg.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- HEADER BAR -->
+  <header class="console-header">
+    <div class="header-left">
+      <svg class="brand-icon" viewBox="0 0 24 24">
+        <path fill="#0091da" d="M12 2L2 7l10 5 10-5-10-5z" />
+        <path fill="#0079b8" d="M2 17l10 5 10-5M2 12l10 5 10-5" />
+      </svg>
+      <div class="vm-info">
+        <span class="vm-title" id="vmTitle">가상머신 콘솔</span>
+        <span class="meta-tag" id="metaNode">Node: -</span>
+        <span class="meta-tag" id="metaOs">Guest OS</span>
+      </div>
+      <div class="status-badge" id="statusBadge">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">연결 중...</span>
+      </div>
+      <span class="meta-tag"
+        style="background: rgba(0, 145, 218, 0.15); color: #0091da; border: 1px solid rgba(0, 145, 218, 0.3); font-weight: 600;">🖥️
+        VNC 웹 콘솔</span>
+    </div>
+
+    <!-- RIGHT CONTROLS -->
+    <div class="header-right">
+      <button class="action-btn" id="btnPaste" title="클립보드 내용 VM으로 붙여넣기 (Ctrl+Shift+V / 클릭)">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+        </svg>
+        <span>붙여넣기</span>
+      </button>
+
+      <button class="action-btn" id="btnSendCad" title="Ctrl+Alt+Delete 신호 전송">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+          <path
+            d="M20 5H4c-1.1 0-1.99.9-1.99 2L2 17c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm4-2h-2v-2h2v2zm0-3h-2v-2h2v2zm0-3h-2V8h2v2z" />
+        </svg>
+        <span>Ctrl+Alt+Del</span>
+      </button>
+
+      <button class="action-btn" id="btnToggleScale" title="화면 크기 자동 맞춤 / 원본 비율 토글">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+        </svg>
+        <span>화면 맞춤</span>
+      </button>
+
+      <button class="action-btn" id="btnReconnect" title="콘솔 다시 연결">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 4v6h-6M1 20v-6h6" />
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+        </svg>
+        <span>재연결</span>
+      </button>
+
+      <button class="action-btn" id="btnFullscreen" title="전체화면 전환">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+        </svg>
+        <span>전체화면</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- VIEWPORT -->
+  <main class="console-viewport" id="consoleViewport">
+
+    <!-- Toast message -->
+    <div class="toast-msg" id="toastMsg">📋 가상머신에 텍스트가 전송되었습니다.</div>
+
+    <!-- VNC Viewport -->
+    <div id="vncContainer"></div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="spinner"></div>
+      <div style="font-size: 14px; color: #94a3b8;" id="loadingText">OpenShift Virtualization 실시간 웹 콘솔 연결 중...</div>
+    </div>
+
+    <!-- Hint Bar -->
+    <div class="notice-bar">
+      <span>💡 화면을 클릭하면 키보드/마우스 입력 활성화</span>
+      <span>붙여넣기: <code>Ctrl+Shift+V</code></span>
+      <span>포커스 해제: <code>Alt</code> 키</span>
+    </div>
+  </main>
+
+  <script type="module">
+    import RFB from '/vendor/novnc/core/rfb.js';
+
+    // Parse URL params
+    const params = new URLSearchParams(window.location.search);
+    const vmName = params.get('vm') || 'ent-db-oracle-01';
+    const vmNode = params.get('node') || '';
+    const vmOs = params.get('os') || 'Linux';
+
+    // DOM references
+    const vmTitle = document.getElementById('vmTitle');
+    const metaNode = document.getElementById('metaNode');
+    const metaOs = document.getElementById('metaOs');
+    const statusText = document.getElementById('statusText');
+    const statusDot = document.getElementById('statusDot');
+    const statusBadge = document.getElementById('statusBadge');
+    const vncContainer = document.getElementById('vncContainer');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingText = document.getElementById('loadingText');
+
+    const btnPaste = document.getElementById('btnPaste');
+    const toastMsg = document.getElementById('toastMsg');
+    const btnSendCad = document.getElementById('btnSendCad');
+    const btnToggleScale = document.getElementById('btnToggleScale');
+    const btnReconnect = document.getElementById('btnReconnect');
+    const btnFullscreen = document.getElementById('btnFullscreen');
+
+    vmTitle.innerText = vmName;
+    document.title = `${vmName} - RHOV Web Console`;
+    metaNode.innerText = vmNode ? `Node: ${vmNode.split('.')[0]}` : 'OpenShift Node';
+    metaOs.innerText = vmOs;
+
+    let activeRfb = null;
+    let isScaled = true;
+
+    // Connect VNC
+    function connectVnc() {
+      cleanup();
+      vncContainer.style.display = 'flex';
+      loadingOverlay.style.display = 'flex';
+      loadingText.innerText = `'${vmName}' VNC 실시간 화면 연결 중...`;
+
+      statusDot.className = 'status-dot connecting';
+      statusText.innerText = 'CONNECTING VNC...';
+
+      vncContainer.innerHTML = '';
+
+      const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProto}//${location.host}/ws/console?vmId=${encodeURIComponent(vmName)}&type=vnc`;
+
+      try {
+        activeRfb = new RFB(vncContainer, wsUrl, {
+          wsProtocols: ['plain.kubevirt.io', 'binary']
+        });
+
+        activeRfb.scaleViewport = isScaled;
+        activeRfb.resizeSession = false;
+
+        activeRfb.addEventListener('connect', () => {
+          loadingOverlay.style.display = 'none';
+          statusDot.className = 'status-dot';
+          statusText.innerText = 'LIVE (VGA 60 FPS)';
+          activeRfb.focus();
+        });
+
+        activeRfb.addEventListener('disconnect', (e) => {
+          statusDot.className = 'status-dot offline';
+          statusText.innerText = 'DISCONNECTED';
+          loadingOverlay.style.display = 'flex';
+          loadingText.innerHTML = `VNC 세션이 종료되었습니다.<br><button class="action-btn primary" onclick="location.reload()" style="margin-top:12px;">다시 연결</button>`;
+        });
+
+        activeRfb.addEventListener('securityfailure', (e) => {
+          console.error('Security failure:', e);
+          statusDot.className = 'status-dot offline';
+          statusText.innerText = 'AUTH FAILED';
+        });
+
+      } catch (err) {
+        console.error('RFB initialization error:', err);
+        loadingOverlay.style.display = 'flex';
+        loadingText.innerHTML = `VNC 초기화 오류: ${err.message}<br><button class="action-btn primary" onclick="location.reload()" style="margin-top:12px;">다시 시도</button>`;
+      }
+    }
+
+    function cleanup() {
+      if (activeRfb) {
+        try { activeRfb.disconnect(); } catch (e) { }
+        activeRfb = null;
+      }
+    }
+
+    // Toast Helper
+    let toastTimeout = null;
+    function showToast(text) {
+      if (!toastMsg) return;
+      toastMsg.innerText = text;
+      toastMsg.classList.add('show');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toastMsg.classList.remove('show');
+      }, 2500);
+    }
+
+    // 텍스트를 한 글자씩 VNC 키보드 키심(keysym)으로 타이핑 주입 (CLI/터미널 환경 완벽 지원)
+    function typeTextToVm(text) {
+      if (!activeRfb) return;
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (char === '\r') continue;
+        let keysym = char.charCodeAt(0);
+        let code = '';
+
+        if (char === '\n') {
+          keysym = 0xff0d; // XK_Return
+          code = 'Enter';
+        } else if (char === '\t') {
+          keysym = 0xff09; // XK_Tab
+          code = 'Tab';
+        } else if (char === ' ') {
+          keysym = 0x0020; // XK_space
+          code = 'Space';
+        }
+        activeRfb.sendKey(keysym, code);
+      }
+    }
+
+    // 클립보드 붙여넣기 실행
+    async function pasteToVm() {
+      if (!activeRfb) return;
+      let text = '';
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          text = await navigator.clipboard.readText();
+        }
+      } catch (err) {
+        console.warn('Clipboard read error, fallback to prompt dialog:', err);
+      }
+
+      if (!text) {
+        text = prompt('가상머신에 붙여넣을 텍스트나 명령어를 입력하세요:');
+      }
+
+      if (text) {
+        // 1) VNC 클립보드 버퍼로 전달 (Windows/GUI 클립보드 동기화)
+        activeRfb.clipboardPasteFrom(text);
+        // 2) 키스트로크 직접 타이핑 주입 (Linux 터미널/쉘 즉각 타이핑)
+        typeTextToVm(text);
+        showToast(`📋 ${text.length}자 텍스트를 가상머신에 붙여넣었습니다.`);
+      }
+    }
+
+    // Controls
+    btnPaste.addEventListener('click', pasteToVm);
+
+    btnSendCad.addEventListener('click', () => {
+      if (activeRfb) {
+        activeRfb.sendCtrlAltDel();
+      }
+    });
+
+    btnToggleScale.addEventListener('click', () => {
+      isScaled = !isScaled;
+      if (activeRfb) {
+        activeRfb.scaleViewport = isScaled;
+      }
+      btnToggleScale.classList.toggle('primary', isScaled);
+    });
+
+    btnReconnect.addEventListener('click', () => {
+      connectVnc();
+    });
+
+    btnFullscreen.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => console.log(err));
+      } else {
+        document.exitFullscreen().catch(err => console.log(err));
+      }
+    });
+
+    // 브라우저 paste 이벤트 및 Ctrl+Shift+V 단축키 감지
+    window.addEventListener('paste', (e) => {
+      const text = e.clipboardData?.getData('text');
+      if (text && activeRfb) {
+        e.preventDefault();
+        activeRfb.clipboardPasteFrom(text);
+        typeTextToVm(text);
+        showToast(`📋 ${text.length}자 텍스트를 붙여넣었습니다.`);
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'V' || e.key === 'v')) {
+        e.preventDefault();
+        pasteToVm();
+      }
+    });
+
+    // Start with VNC
+    connectVnc();
+  </script>
+</body>
+
+</html>

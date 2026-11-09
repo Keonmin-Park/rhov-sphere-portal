@@ -1,0 +1,64 @@
+additionalTrustBundlePolicy: Always
+apiVersion: v1
+baseDomain: ${BASE_DOMAIN:-example.local}
+compute:
+- architecture: amd64
+  hyperthreading: Enabled
+  name: worker
+  platform:
+    vsphere:
+      cpus: 16
+      coresPerSocket: 4
+      memoryMB: 65536 # 64 GB RAM
+      osDisk:
+        diskSizeGB: 150 # 150 GB OS 디스크
+  replicas: 3 # 워커 3대
+controlPlane:
+  architecture: amd64
+  hyperthreading: Enabled
+  name: master
+  platform: {} # 마스터는 기본값(4 vCPU, 16 GB RAM, 120 GB Disk) 자동 적용
+  replicas: 3 # 마스터 3대
+metadata:
+  name: ${CLUSTER_NAME:-rhov-cluster}
+networking:
+  clusterNetwork:
+  - cidr: 10.128.0.0/14
+    hostPrefix: 23
+  machineNetwork:
+  - cidr: ${MACHINE_NETWORK_CIDR:-192.168.100.0/24}
+  networkType: OVNKubernetes
+  serviceNetwork:
+  - 172.30.0.0/16
+platform:
+  vsphere:
+    apiVIPs:
+    - ${API_VIP:-192.168.100.200}
+    dnsRecordsType: Internal
+    failureDomains:
+    - name: generated-failure-domain
+      region: generated-region
+      server: ${VCENTER_SERVER:-vcenter.example.internal}
+      zone: generated-zone
+      topology:
+        datacenter: Main-Datacenter
+        computeCluster: /Main-Datacenter/host/Compute-Cluster-01
+        datastore: /Main-Datacenter/datastore/vsan-datastore-01
+        networks:
+        - ${VSPHERE_NETWORK:-VM_Network}
+        # [리소스 풀] 별도 생성하신 풀 이름 (예: /Resources/RHOV-Pool) 또는 기본값 /Resources
+        resourcePool: /Main-Datacenter/host/Compute-Cluster-01/Resources/<RESOURCE_POOL_NAME>
+        # [VM 폴더] vCenter에서 미리 생성해 둔 폴더 경로 (/Main-Datacenter/vm/<폴더이름>)
+        folder: /Main-Datacenter/vm/<VM_FOLDER_NAME>
+    ingressVIPs:
+    - ${INGRESS_VIP:-192.168.100.201}
+    vcenters:
+    - datacenters:
+      - Main-Datacenter
+      password: xxxx
+      port: 443
+      server: xxxxx
+      user: xxxxx
+publish: External
+pullSecret: xxxx
+sshKey: '<배스천_cat ~/.ssh/id_ocp_rsa.pub_출력값>'

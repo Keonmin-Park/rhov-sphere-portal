@@ -1,0 +1,48 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: rhel-test-vm
+  namespace: default
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: rhel-test-vm
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+            - name: external-net
+              bridge: {}
+      networks:
+        - name: default
+          pod: {}
+        - name: external-net
+          multus:
+            networkName: default/br0-vlan-net
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: rhel9-disk-pvc
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |-
+              #cloud-config
+              user: cloud-user
+              password: ${VM_PASSWORD}
+              chpasswd: { expire: False }
+              ssh_pwauth: True
