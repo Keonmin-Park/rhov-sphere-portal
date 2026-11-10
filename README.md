@@ -1,8 +1,8 @@
 # RHOV Sphere Portal: Kubernetes 가상화(KubeVirt) 관제 포털 및 전환 아키텍처
 
-> **참고:** 본 저장소는 인프라 운영 현장의 전환 과제를 해결하기 위해 설계·구현한 프로젝트로, 모든 환경 설정은 `.env.example` 기반으로 일반화되어 있습니다.
+> **참고:** 본 저장소는 가상화 인프라의 컨테이너 전환 과제를 해결하기 위해 설계·구현된 프로젝트이며, 모든 설정값은 `.env.example` 기반으로 템플릿화되어 있습니다.
 
-레거시 **VMware vSphere**에서 **Kubernetes 기반 가상화(OpenShift Virtualization / KubeVirt)**로 전환할 때 발생하는 운영팀의 UI/CLI 진입 장벽과 조작 실수(Toil)를 줄이기 위해, **인프라 엔지니어 관점에서 핵심 운영 가드레일을 설계하고 AI Coding Agent를 지휘하여 구현·검증한 관제 포털 및 아키텍처 매니페스트**입니다.
+VMware vSphere 환경에서 **Kubernetes 기반 가상화(OpenShift Virtualization / KubeVirt)**로 전환할 때 발생하는 운영팀의 진입 장벽과 휴먼 에러(Toil)를 최소화하기 위해, **스토리지/네트워크 안전 정책(가드레일)을 정의하고 BFF + Watch 스트림 아키텍처로 구현·검증한 관제 포털 및 선언적 인프라 매니페스트**입니다.
 
 ---
 
